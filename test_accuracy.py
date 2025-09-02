@@ -55,33 +55,25 @@ class ModelTester:
         self._initialize_model()
     
     def _initialize_model(self):
-        """Initialize the specific model client"""
+        """Initialize the OpenRouter client for unified API access"""
         try:
-            if self.model_name.lower() == "openai":
-                import openai
-                self.client = openai.OpenAI(api_key=self.model_config.get("api_key"))
-                
-            elif self.model_name.lower() == "gemini":
-                import google.generativeai as genai
-                genai.configure(api_key=self.model_config.get("api_key"))
-                self.client = genai.GenerativeModel(self.model_config.get("model", "gemini-pro"))
-
-            elif self.model_name.lower() == "claude":
-                import anthropic
-                self.client = anthropic.Anthropic(api_key=self.model_config.get("api_key"))
-                
-            else:
-                raise ValueError(f"Unsupported model: {self.model_name}")
-                
+            import openai
+            
+            # Use OpenRouter API with OpenAI client
+            self.client = openai.OpenAI(
+                api_key=self.model_config.get("api_key"),
+                base_url="https://openrouter.ai/api/v1"
+            )
+            
             self.model = self.model_config.get("model")
 
-            logger.info(f"Initialized {self.model_name} model successfully")
+            logger.info(f"Initialized OpenRouter client for model {self.model} successfully")
             
         except ImportError as e:
-            logger.error(f"Failed to import required package for {self.model_name}: {e}")
+            logger.error(f"Failed to import OpenAI package: {e}")
             raise
         except Exception as e:
-            logger.error(f"Failed to initialize {self.model_name} model: {e}")
+            logger.error(f"Failed to initialize OpenRouter client: {e}")
             raise
     
     def test_question(self, question: Dict[str, Any]) -> TestResult:
@@ -156,40 +148,20 @@ Answer:"""
         return prompt
     
     def _get_model_response(self, prompt: str) -> str:
-        """Get response from the specific model"""
+        """Get response from the model via OpenRouter"""
         
-        if self.model_name.lower() == "openai":
-            if self.model == "gpt-5":
-                response = self.client.chat.completions.create(
-                  model=self.model,
-                  messages=[{"role": "user", "content": prompt}],
-                  temperature=1.0,  # this is the only supported value
-                  max_completion_tokens=self.model_config.get("max_tokens", 10),
-                )
-            else:
-                response = self.client.chat.completions.create(
-                  model=self.model,
-                  messages=[{"role": "user", "content": prompt}],
-                  temperature=self.model_config.get("temperature", 0.0),
-                  max_tokens=self.model_config.get("max_tokens", 10)
-                )
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=self.model_config.get("temperature", 0.0),
+                max_tokens=self.model_config.get("max_tokens", 10)
+            )
             return response.choices[0].message.content.strip()
             
-        elif self.model_name.lower() == "gemini":
-            response = self.client.generate_content(prompt)
-            return response.text.strip()
-            
-        elif self.model_name.lower() == "claude":
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=self.model_config.get("max_tokens", 10),
-                temperature=self.model_config.get("temperature", 0.0),
-                messages=[{"role": "user", "content": prompt}]
-            )
-            return response.content[0].text.strip()
-        
-        else:
-            raise ValueError(f"Unsupported model: {self.model_name}")
+        except Exception as e:
+            logger.error(f"Error getting response from {self.model}: {e}")
+            raise
     
     def _extract_answer(self, response: str) -> str:
         """Extract the single letter answer from the model response"""
@@ -249,7 +221,10 @@ class BenchmarkTester:
     
     def _get_checkpoint_file(self, model_name: str, model: str) -> Path:
         """Get checkpoint file path for a specific model"""
-        return self.output_dir / f"checkpoint_{model_name}_{model}.json"
+        # Replace slashes with underscores to avoid file path issues
+        safe_model_name = model_name.replace("/", "_")
+        safe_model = model.replace("/", "_")
+        return self.output_dir / f"checkpoint_{safe_model_name}_{safe_model}.json"
     
     def _save_checkpoint(self, model_name: str, model: str):
         """Save checkpoint for a specific model"""
@@ -411,54 +386,37 @@ class BenchmarkTester:
             logger.error(f"Failed to export CSV: {e}")
 
 def get_model_config(model_name: str) -> Dict[str, Any]:
-    """Get configuration for a specific model from environment variables"""
+    """Get configuration for a specific model using OpenRouter"""
     
-    # Define default configurations
-    configs = {
-        "openai": {
-            "api_key": os.getenv("OPENAI_API_KEY"),
-            "model": os.getenv("OPENAI_MODEL"),
-            "temperature": float(os.getenv("OPENAI_TEMPERATURE", "0.0")),
-            "max_tokens": int(os.getenv("OPENAI_MAX_TOKENS", "10")),
-        },
-        "gemini": {
-            "api_key": os.getenv("GOOGLE_API_KEY"),
-            "model": os.getenv("GOOGLE_MODEL"),
-            "temperature": float(os.getenv("GOOGLE_TEMPERATURE", "0.0")),
-            "max_tokens": int(os.getenv("GOOGLE_MAX_TOKENS", "10")),
-        },
-        "claude": {
-            "api_key": os.getenv("ANTHROPIC_API_KEY"),
-            "model": os.getenv("ANTHROPIC_MODEL"),
-            "temperature": float(os.getenv("ANTHROPIC_TEMPERATURE", "0.0")),
-            "max_tokens": int(os.getenv("ANTHROPIC_MAX_TOKENS", "10")),
-        }
+    # Get OpenRouter API key
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise ValueError("OPENROUTER_API_KEY not found. Please set this environment variable.")
+    
+    # Use the model name from command line, or fall back to environment variable
+    model = os.getenv("OPENROUTER_MODEL", model_name)
+    temperature = float(os.getenv("OPENROUTER_TEMPERATURE", "0.0"))
+    max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "10"))
+    
+    return {
+        "api_key": api_key,
+        "model": model,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
     }
-    
-    if model_name.lower() not in configs:
-        raise ValueError(f"Unsupported model: {model_name}")
-    
-    config = configs[model_name.lower()]
-    
-    if not config["api_key"]:
-        raise ValueError(f"API key not found for {model_name}. Please set the appropriate environment variable.")
-    
-    return config
 
 def load_environment_config() -> Dict[str, Any]:
     """Load configuration from environment variables and .env file"""
     
     config = {}
     
-    # API Keys
-    config["openai_api_key"] = os.getenv("OPENAI_API_KEY")
-    config["google_api_key"] = os.getenv("GOOGLE_API_KEY")
-    config["anthropic_api_key"] = os.getenv("ANTHROPIC_API_KEY")
+    # OpenRouter API Key
+    config["openrouter_api_key"] = os.getenv("OPENROUTER_API_KEY")
     
     # Model configurations
-    config["openai_model"] = os.getenv("OPENAI_MODEL")
-    config["google_model"] = os.getenv("GOOGLE_MODEL")
-    config["anthropic_model"] = os.getenv("ANTHROPIC_MODEL")
+    config["openrouter_model"] = os.getenv("OPENROUTER_MODEL")
+    config["openrouter_temperature"] = float(os.getenv("OPENROUTER_TEMPERATURE", "0.0"))
+    config["openrouter_max_tokens"] = int(os.getenv("OPENROUTER_MAX_TOKENS", "10"))
     
     # Testing configurations
     config["checkpoint_interval"] = int(os.getenv("CHECKPOINT_INTERVAL", "10"))
@@ -476,16 +434,10 @@ def print_environment_status():
     print("🔧 Environment Configuration Status")
     print("=" * 50)
     
-    # Check API keys
-    api_keys = {
-        "OpenAI": os.getenv("OPENAI_API_KEY"),
-        "Google Gemini": os.getenv("GOOGLE_API_KEY"),
-        "Anthropic Claude": os.getenv("ANTHROPIC_API_KEY")
-    }
-    
-    for provider, key in api_keys.items():
-        status = "✅" if key else "❌"
-        print(f"{status} {provider}: {'Configured' if key else 'Not configured'}")
+    # Check OpenRouter API key
+    openrouter_key = os.getenv("OPENROUTER_API_KEY")
+    status = "✅" if openrouter_key else "❌"
+    print(f"{status} OpenRouter: {'Configured' if openrouter_key else 'Not configured'}")
     
     # Check .env file
     env_file = Path(".env")
@@ -517,17 +469,17 @@ def print_environment_help():
     print("\n📁 .env File Setup:")
     print("1. Copy env.example to .env:")
     print("   cp env.example .env")
-    print("2. Edit .env and add your API keys:")
-    print("   OPENAI_API_KEY=your_actual_key_here")
-    print("   GOOGLE_API_KEY=your_actual_key_here")
-    print("   ANTHROPIC_API_KEY=your_actual_key_here")
+    print("2. Edit .env and add your OpenRouter API key:")
+    print("   OPENROUTER_API_KEY=your_actual_key_here")
     
     print("\n🔑 Required API Keys:")
-    print("- OPENAI_API_KEY: For testing OpenAI models (GPT-4, GPT-3.5)")
-    print("- GOOGLE_API_KEY: For testing Google Gemini models")
-    print("- ANTHROPIC_API_KEY: For testing Anthropic Claude models")
+    print("- OPENROUTER_API_KEY: For accessing models via OpenRouter")
+    print("  Get your key from: https://openrouter.ai/keys")
     
     print("\n⚙️  Optional Configuration:")
+    print("- OPENROUTER_MODEL: Model to use (default: uses --model parameter)")
+    print("- OPENROUTER_TEMPERATURE: Temperature setting (default: 0.0)")
+    print("- OPENROUTER_MAX_TOKENS: Max tokens per response (default: 10)")
     print("- CHECKPOINT_INTERVAL: Save progress every N questions (default: 10)")
     print("- OUTPUT_DIRECTORY: Directory for results (default: 'results')")
     print("- DELAY_BETWEEN_QUESTIONS: Delay in seconds (default: 1.0)")
@@ -536,10 +488,12 @@ def print_environment_help():
     print("\n📖 Usage Examples:")
     print("1. Check configuration status:")
     print("   python test_accuracy.py --status")
-    print("2. Test with OpenAI (using .env config):")
-    print("   python test_accuracy.py --model openai")
-    print("3. Override environment settings:")
-    print("   python test_accuracy.py --model openai --checkpoint-interval 5")
+    print("2. Test with GPT-4 via OpenRouter:")
+    print("   python test_accuracy.py --model openai/gpt-4")
+    print("3. Test with Claude via OpenRouter:")
+    print("   python test_accuracy.py --model anthropic/claude-3-sonnet")
+    print("4. Override environment settings:")
+    print("   python test_accuracy.py --model openai/gpt-4 --checkpoint-interval 5")
     
     print("=" * 50)
 
@@ -547,8 +501,8 @@ def main():
     """Main function"""
     
     parser = argparse.ArgumentParser(description="Test language models on faith benchmark questions")
-    parser.add_argument("--model", required=True, choices=["openai", "gemini", "claude"], 
-                       help="Language model to test")
+    parser.add_argument("--model", 
+                       help="Model to test (e.g., 'openai/gpt-4', 'anthropic/claude-3-sonnet', 'google/gemini-pro')")
     parser.add_argument("--questions", default="faith_benchmark_questions.json",
                        help="Path to questions JSON file")
     parser.add_argument("--output-dir", default=None,
@@ -563,6 +517,10 @@ def main():
                        help="Show environment configuration help and exit")
     
     args = parser.parse_args()
+    
+    # Check if model is required (not needed for help commands)
+    if not args.status and not args.help_env and not args.model:
+        parser.error("--model is required unless using --status or --help-env")
     
     # Show environment status if requested
     if args.status:
@@ -596,10 +554,8 @@ def main():
     except ValueError as e:
         print(f"❌ {e}")
         print("\n💡 Environment Configuration Help:")
-        print("   Set API keys in environment variables or .env file:")
-        print("   - OPENAI_API_KEY for OpenAI models")
-        print("   - GOOGLE_API_KEY for Gemini models")
-        print("   - ANTHROPIC_API_KEY for Claude models")
+        print("   Set OpenRouter API key in environment variables or .env file:")
+        print("   - OPENROUTER_API_KEY for accessing models via OpenRouter")
         print("\n   Run with --help-env for detailed configuration help")
         print("   Run with --status to see current configuration")
         sys.exit(1)

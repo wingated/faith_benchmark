@@ -10,7 +10,8 @@ import os
 import sys
 import argparse
 import time
-from typing import List, Dict, Any, Optional
+import random
+from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 import logging
 from pathlib import Path
@@ -81,8 +82,8 @@ class ModelTester:
         
         start_time = time.time()
         
-        # Construct the prompt
-        prompt = self._construct_prompt(question)
+        # Construct the prompt and get the correct answer letter
+        prompt, correct_answer_letter = self._construct_prompt(question)
         
         try:
             # Get response from model
@@ -100,9 +101,9 @@ class ModelTester:
                 topic=question["topic"],
                 question_text=question["question_text"],
                 tags=question["tags"],
-                correct_answer=question["correct_answer"],
+                correct_answer=correct_answer_letter,
                 model_answer=model_answer,
-                is_correct=model_answer == question["correct_answer"],
+                is_correct=model_answer == correct_answer_letter,
                 model_name=self.model_name,
                 timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
                 response_time=response_time,
@@ -119,7 +120,7 @@ class ModelTester:
                 topic=question["topic"],
                 question_text=question["question_text"],
                 tags=question["tags"],
-                correct_answer=question["correct_answer"],
+                correct_answer=correct_answer_letter,
                 model_answer="ERROR",
                 is_correct=False,
                 model_name=self.model_name,
@@ -128,24 +129,33 @@ class ModelTester:
                 raw_response=f"Error: {str(e)}"
             )
     
-    def _construct_prompt(self, question: Dict[str, Any]) -> str:
-        """Construct the prompt for the model"""
+    def _construct_prompt(self, question: Dict[str, Any]) -> Tuple[str, str]:
+        """Construct the prompt for the model and return the correct answer letter"""
+        
+        # Create a copy of answers and randomize the order
+        answers = question['answers'].copy()
+        random.shuffle(answers)
+        
+        # Find which position the correct answer is in after shuffling
+        correct_answer_text = question['correct_answer']
+        correct_position = answers.index(correct_answer_text)
+        correct_letter = chr(ord('A') + correct_position)
         
         prompt = f"""You are taking a multiple choice test about The Church of Jesus Christ of Latter-day Saints.
 
 Question: {question['question_text']}
 
 Options:
-A) {question['answers'][0]}
-B) {question['answers'][1]}
-C) {question['answers'][2]}
-D) {question['answers'][3]}
+A) {answers[0]}
+B) {answers[1]}
+C) {answers[2]}
+D) {answers[3]}
 
 Instructions: Answer with ONLY a single letter (A, B, C, or D). Do not include any other text, explanation, or formatting.
 
 Answer:"""
         
-        return prompt
+        return prompt, correct_letter
     
     def _get_model_response(self, prompt: str) -> str:
         """Get response from the model via OpenRouter"""
@@ -396,7 +406,7 @@ def get_model_config(model_name: str) -> Dict[str, Any]:
     # Use the model name from command line, or fall back to environment variable
     model = os.getenv("OPENROUTER_MODEL", model_name)
     temperature = float(os.getenv("OPENROUTER_TEMPERATURE", "0.0"))
-    max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "10"))
+    max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "16"))
     
     return {
         "api_key": api_key,

@@ -4,6 +4,15 @@
 3) Respectful discourse
 
 
+doctrine
+steerability
+tone
+bias
+
+What about Nancy's nursery battery?
+
+
+
 Faith steerability benchmark
   - find questions / issues that different faiths would respond differently to
 
@@ -115,7 +124,7 @@ Pew categories for religion
 rude questions from fair-minded people who are misinformed
 unwittingly gotten themselves into an information bubble
 
-not too worried about people who are rude 
+not too worried about people who are rude
 
 
 questions where you get very different answer
@@ -172,9 +181,9 @@ Categories
 
   obscure ideas
     tell me about mormons' belief in blood atonement
-    
+
   outdated ideas
-    
+
 
   dispute-the-premise
 
@@ -189,7 +198,7 @@ Categories
 
   tell me the name of the second token
 
-  
+
 Scoring:
   Required elements of an answer
   Optional-but-good elements
@@ -307,4 +316,3 @@ AI Assistants Can Give Biased Feedback (Feedback Sycophancy).
 AI Assistants Can Be Easily Swayed (Are You Sure? Sycophancy)
 AI Assistants Can Provide Answers that Conform to User Beliefs (Answer Sycophancy)
 AI Assistant Responses Sometimes Mimic User Mistakes (Mimicry Sycophancy)
-
